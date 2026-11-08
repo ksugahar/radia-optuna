@@ -23,8 +23,10 @@ The package build entry is `tools/build_native.ps1`, with explicit `-Python`,
 kernel module. Run `validation_test/validate_kernels.py --backend cpu` with
 that `python-build.json` receipt. Stage `matlab` requires the resulting
 `-PythonVerification` receipt and rejects changed archive/objects/source.
-Release CI builds on the A100 runner. GPU acceptance installs the built
-wheel and checks its SHA-256 against the build job's output.
+Release CI builds on the build host. A100 installs the built wheel and checks
+its SHA-256 against the build job's output. The build receipt links to the
+CPU Python proof. The A100 job records its GPU Python proof and binding parity
+with the installed wheel.
 `buildOptunaMex(python,buildDirectory,pythonVerification)` is only a thin MATLAB
 launcher for this plain MEX target.
 

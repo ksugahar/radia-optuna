@@ -8,11 +8,11 @@ if ($wheels.Count -ne 1 -or $env:EXPECTED_WHEEL_SHA256 -notmatch '^[0-9a-f]{64}$
 $wheel = $wheels[0].FullName
 $sha256 = (Get-FileHash -LiteralPath $wheel -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($sha256 -cne $env:EXPECTED_WHEEL_SHA256) { throw 'Wheel differs from the build-job SHA-256.' }
-python verify_wheel.py $wheel --release-candidate --json
+py -3.12 verify_wheel.py $wheel --release-candidate --json
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $venv = Join-Path $env:RUNNER_TEMP "radia-optuna-gpu-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-python -m venv $venv
+py -3.12 -m venv $venv
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $py = Join-Path $venv 'Scripts/python.exe'
 $env:PYTHONPATH = ''
