@@ -74,7 +74,7 @@ class Remote:
         self.token = token
         self.opener = opener or request.build_opener(NoRedirect())
 
-    def read(self, url, *, binary=False, public=False, absent=False):
+    def read(self, url, *, binary=False, public=False, absent=False, api_accept=None):
         checked_url(url, public=public)
         limit = MAX_ARCHIVE if binary else MAX_JSON
         authorization = not public
@@ -82,6 +82,8 @@ class Remote:
             headers = {"Accept": "application/octet-stream" if binary else
                        ("application/json" if public else "application/vnd.github+json")}
             if authorization:
+                if api_accept is not None:
+                    headers["Accept"] = api_accept
                 headers["Authorization"] = "Bearer " + self.token
                 headers["X-GitHub-Api-Version"] = "2022-11-28"
             try:
@@ -262,7 +264,9 @@ def verify(remote, context, run_id, expected_hash, destination, frozen=None):
     jobs = remote.pages(prefix + f"/actions/runs/{run_id}/jobs?filter=latest", "jobs")
     identity = run_identity(run, jobs, repo, source_sha, run_id)
     artifact = choose_artifact(remote.pages(prefix + f"/actions/runs/{run_id}/artifacts", "artifacts"))
-    raw = remote.read("https://api.github.com" + prefix + f"/actions/artifacts/{artifact['id']}/zip", binary=True)
+    # The Actions API negotiates JSON before redirecting to the archive bytes.
+    raw = remote.read("https://api.github.com" + prefix + f"/actions/artifacts/{artifact['id']}/zip",
+                      binary=True, api_accept="application/vnd.github+json")
     archive_digest = artifact.get("digest")
     require(isinstance(archive_digest, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", archive_digest),
             "Missing or invalid artifact archive digest")
