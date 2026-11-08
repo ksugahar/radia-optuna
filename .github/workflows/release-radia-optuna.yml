@@ -56,6 +56,16 @@ jobs:
           path: publication-proof.json
           if-no-files-found: error
           retention-days: 7
+      - name: Check approval proof download before requesting approval
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.proof.outputs.artifact-id }}
+          run-id: ${{ github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: proof
+          merge-multiple: true
+      - name: Compare the downloaded approval proof with the original
+        run: cmp publication-proof.json proof/publication-proof.json
 
   publish:
     needs: verify
@@ -86,6 +96,7 @@ jobs:
           run-id: ${{ github.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: proof
+          merge-multiple: true
       - name: Recheck the same source, CI attempt, artifact ID and wheel after approval
         id: audit
         env:
