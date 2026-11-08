@@ -29,7 +29,7 @@ jobs:
   build-test:
     needs: source-contracts
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-    runs-on: [self-hosted, Windows, X64, "100"]
+    runs-on: [self-hosted, Windows, X64, gpu-a100]
     timeout-minutes: 45
     outputs:
       wheel-sha256: ${{ steps.wheel.outputs.sha256 }}
