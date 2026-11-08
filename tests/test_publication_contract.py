@@ -237,7 +237,11 @@ def redirect(target):
 
 def test_github_authorization_is_removed_on_signed_download_redirect():
     opener = Opener([redirect("https://production.blob.core.windows.net/path?signature=secret"), Response(b"zip")])
-    assert gate.Remote("not-a-real-token", opener).read("https://api.github.com/repos/owner/repo/actions/artifacts/31/zip", binary=True) == b"zip"
+    assert gate.Remote("not-a-real-token", opener).read(
+        "https://api.github.com/repos/owner/repo/actions/artifacts/31/zip",
+        binary=True, api_accept="application/vnd.github+json") == b"zip"
+    assert opener.requests[0].get_header("Accept") == "application/vnd.github+json"
+    assert opener.requests[1].get_header("Accept") == "application/octet-stream"
     assert opener.requests[0].get_header("Authorization") == "Bearer not-a-real-token"
     assert opener.requests[1].get_header("Authorization") is None
     assert all(req.get_method() == "GET" for req in opener.requests)
