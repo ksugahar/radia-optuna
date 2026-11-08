@@ -144,6 +144,8 @@ jobs:
           path: dist/radia-optuna
       - name: Qualify the exact CI wheel through MATLAB Engine
         shell: pwsh
+        env:
+          EXPECTED_WHEEL_SHA256: ${{ needs.build-test.outputs.wheel-sha256 }}
         run: |
           $wheels = @(Get-ChildItem dist/radia-optuna/*.whl)
           if ($wheels.Count -ne 1) {
@@ -152,13 +154,14 @@ jobs:
           $receipt = Join-Path $env:RUNNER_TEMP "radia-optuna-release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT.json"
           $python = (& py -3.12 -I -c "import sys; print(sys.executable)").Trim()
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Expected an installed Python 3.12 interpreter.' }
-          & pwsh -NoProfile -File tests/run_installed_wheel_simulink.ps1 -PythonExecutable $python -Wheel $wheels[0].FullName -EvidenceOutput $receipt
+          if ($env:EXPECTED_WHEEL_SHA256 -notmatch '^[0-9a-f]{64}$') { throw 'Expected the build-job SHA-256.' }
+          & pwsh -NoProfile -File tests/run_installed_wheel_simulink.ps1 -PythonExecutable $python -Wheel $wheels[0].FullName -EvidenceOutput $receipt -PreverifiedWheelSha256 $env:EXPECTED_WHEEL_SHA256
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   installed-wheel-hdf5-storage:
     name: radia-optuna installed-wheel HDF5 storage (CPU MATLAB)
     needs: [build-test]
-    runs-on: [self-hosted, Windows, X64, gpu-a100]
+    runs-on: [self-hosted, Windows, X64, "100"]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
