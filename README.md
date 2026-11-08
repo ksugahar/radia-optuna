@@ -600,8 +600,10 @@ and cannot satisfy the 0.3.0 release gate. Parallel results remain calibrated
 scheduler evidence rather than a promise that every CAE objective scales by
 the same factor; cheap objectives should remain sequential.
 
-For a release, qualify the exact wheel from successful main CI on the required
-CPU and GPU targets. Record the CI run ID and the reviewed wheel's SHA-256
+For a release, dispatch `radia-optuna.yml` on `main`. Its Windows runner must
+have the build toolchain, MATLAB and the GPU qualification labels. The run
+qualifies its exact wheel through the CPU/GPU checks, the installed-wheel
+HDF5 gate and the installed-wheel MATLAB Engine check. Record the CI run ID and the reviewed wheel's SHA-256
 before tagging the matching commit as `radia-optuna-v<version>`. Dispatch the
 release workflow on that tag with those two values. Its publication verifier
 checks the source and wheel again after approval. The `pypi` environment and

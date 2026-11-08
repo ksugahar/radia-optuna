@@ -22,7 +22,12 @@ import zipfile
 PACKAGE = Path(__file__).resolve().parents[1]
 MAX_ARCHIVE = 256 * 1024 * 1024
 MAX_JSON = 8 * 1024 * 1024
-REQUIRED_JOBS = ("build-test", "radia-optuna installed-wheel MATLAB/Simulink E2E")
+REQUIRED_JOBS = (
+    "build-test",
+    "radia-optuna installed-wheel MATLAB/Simulink E2E",
+    "radia-optuna installed-wheel HDF5 storage (CPU MATLAB)",
+    "radia-optuna installed-wheel release Engine",
+)
 IDENTITY = ("schema", "repository", "ref", "tag", "tag_object_sha", "source_sha",
             "ci_run_id", "run_attempt", "job_ids", "artifact_id", "wheel",
             "wheel_sha256", "version", "archive_sha256")

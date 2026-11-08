@@ -9,9 +9,7 @@ param(
     # dedicated session is started only when no MATLAB process or shared
     # Engine exists; an existing MATLAB without a selected session refuses.
     # com:<PID> selects an already enabled local desktop COM session.
-    [string]$EngineSession = '',
-    # The solver release Engine worker that owns this policy.
-    [string]$EngineWorker = ''
+    [string]$EngineSession = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -124,13 +122,11 @@ try {
     $pathReset = if ($EngineSession) { '' } else { 'restoredefaultpath; ' }
     $batch = "${pathReset}addpath('$matlabPathLiteral','-begin'); addpath('$testDirectoryLiteral','-begin'); run_installed_wheel_acceptance('$matlabPathLiteral','$simulinkEvidenceLiteral');"
 
-    # MATLAB runs through the solver release Engine worker, which reuses only
+    # MATLAB runs through the package's Engine worker, which reuses only
     # the selected shared session (PID-checked, with path, folder and
     # environment restored and no loaded diagrams or Radia/Optuna MEX), or
     # owns one new session when no MATLAB process or shared Engine exists.
-    if (-not $EngineWorker) {
-        $EngineWorker = Join-Path $PSScriptRoot '..\..\..\tools\verify_simulink_release.py'
-    }
+    $engineWorker = Join-Path $packageRoot 'tools/matlab_acceptance_worker.py'
     if (-not (Test-Path -LiteralPath $EngineWorker -PathType Leaf)) {
         throw "MATLAB Engine worker is missing: $EngineWorker"
     }
@@ -176,7 +172,7 @@ try {
         ownership = if ($EngineSession) { 'borrowed' } else { 'owned' }
         transport = if ($EngineSession.StartsWith('com:')) { 'matlab-com' } else { 'matlab-engine' }
     }
-    $workerArguments = @('-X', 'utf8', '-s', $EngineWorker, '--engine-worker', $matlabRoot, $batch)
+    $workerArguments = @('-X', 'utf8', '-s', $engineWorker, $matlabRoot, $batch)
     if ($EngineSession) { $workerArguments += $EngineSession }
 
     # MathWorks' online license service can transiently reject an otherwise

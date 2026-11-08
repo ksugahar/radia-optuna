@@ -15,9 +15,22 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  source-contracts:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest packaging
+      - run: python -m pytest tests -q
+
   build-test:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: source-contracts
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
     runs-on: [self-hosted, Windows, X64, "100", gpu-rtx]
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -138,6 +151,28 @@ jobs:
           name: radia-optuna-simulink-gpu-acceptance
           path: installed-wheel-simulink.json
           if-no-files-found: error
+
+  installed-wheel-release-engine:
+    name: radia-optuna installed-wheel release Engine
+    needs: [build-test]
+    runs-on: [self-hosted, Windows, X64, "100", gpu-rtx]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: radia-optuna-wheel
+          path: dist/radia-optuna
+      - name: Qualify the exact CI wheel through MATLAB Engine
+        shell: pwsh
+        run: |
+          $wheels = @(Get-ChildItem dist/radia-optuna/*.whl)
+          if ($wheels.Count -ne 1) {
+            throw "Expected one verified radia-optuna wheel, found $($wheels.Count)"
+          }
+          $receipt = Join-Path $env:RUNNER_TEMP "radia-optuna-release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT.json"
+          & pwsh -NoProfile -File tests/run_installed_wheel_simulink.ps1 -Wheel $wheels[0].FullName -EvidenceOutput $receipt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   installed-wheel-hdf5-storage:
     name: radia-optuna installed-wheel HDF5 storage (CPU MATLAB)
