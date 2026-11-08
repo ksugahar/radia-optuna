@@ -8,7 +8,6 @@ import sys
 import ctypes
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'src'))
 def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 def current_context():
     # Independent non-creating driver observation, not the kernel's counters.
@@ -32,13 +31,23 @@ def main():
     p.add_argument('--backend',choices=['cpu','gpu'],required=True)
     p.add_argument('--build-receipt',type=Path,required=True)
     p.add_argument('--report',type=Path,required=True)
+    p.add_argument('--installed-wheel', action='store_true')
     a=p.parse_args()
+    if not a.installed_wheel:
+        sys.path.insert(0,str(ROOT/'src'))
+    from radia_optuna import layout
+    import radia_optuna
+    expected_layout = 'wheel' if a.installed_wheel else 'checkout'
+    assert layout() == expected_layout, 'Wrong Optuna package layout'
+    package_dir = Path(radia_optuna.__file__).resolve().parent
     before=current_context() if a.backend=='cpu' else None
     from radia_optuna.kernels import load
     k=load(a.backend)
     build=json.loads(a.build_receipt.read_text())
     binary=Path(k.__file__).resolve()
-    assert binary.parent==(ROOT/'src/radia_optuna').resolve(),'Wrong native import origin'
+    if not a.installed_wheel:
+        assert package_dir==(ROOT/'src/radia_optuna').resolve(),'Wrong source package origin'
+    assert binary.parent==package_dir,'Wrong native import origin'
     assert sha(binary)==build['python_extension_sha256s'].get(binary.name),'Native binding hash mismatch'
     oracle=ROOT/'oracles/optuna50_cuda_oracle.json'
     frozen=sha(oracle);data=json.loads(oracle.read_text());assert data['optuna_version']=='5.0.0'

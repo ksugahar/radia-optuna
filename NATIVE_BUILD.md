@@ -20,10 +20,11 @@ bytes and numerical limits remain unchanged.
 
 The package build entry is `tools/build_native.ps1`, with explicit `-Python`,
 `-MatlabRoot` and `-BuildDirectory` paths. Stage `python` builds the private
-kernel module. Run `validation_test/validate_kernels.py --backend cpu` and then
-`--backend gpu` with that `python-build.json` receipt; GPU execution requires
-its own resource authorization. Stage `matlab` requires the resulting
+kernel module. Run `validation_test/validate_kernels.py --backend cpu` with
+that `python-build.json` receipt. Stage `matlab` requires the resulting
 `-PythonVerification` receipt and rejects changed archive/objects/source.
+Release CI builds on the build host and runs GPU acceptance on A100 from the
+installed wheel, whose SHA-256 must match the build job's output.
 `buildOptunaMex(python,buildDirectory,pythonVerification)` is only a thin MATLAB
 launcher for this plain MEX target.
 
