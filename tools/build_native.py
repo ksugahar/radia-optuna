@@ -50,7 +50,7 @@ def main():
         '-ccbin',str(cl),'--dont-use-profile','-ldir',str(matlab/'bin/win64'),
         '-I'+str(cuda/'include'),'-DNOMINMAX','-D_CRT_SECURE_NO_DEPRECATE',
         '-D_SCL_SECURE_NO_DEPRECATE','-D_SECURE_SCL=0',
-        '-gencode=arch=compute_75,code=sm_75','-gencode=arch=compute_80,code=sm_80',
+        '-gencode=arch=compute_80,code=sm_80',
         '-gencode=arch=compute_80,code=compute_80','-o',str(cuda_object),str(GPU_SOURCE)]
     previous=None
     if a.stage=='matlab':

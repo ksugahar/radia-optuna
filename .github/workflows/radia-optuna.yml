@@ -29,8 +29,10 @@ jobs:
   build-test:
     needs: source-contracts
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
-    runs-on: [self-hosted, Windows, X64, "100", gpu-rtx]
+    runs-on: [self-hosted, Windows, X64, "100"]
     timeout-minutes: 45
+    outputs:
+      wheel-sha256: ${{ steps.wheel.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           $venv = Join-Path $env:RUNNER_TEMP "radia-optuna-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          python -m venv $venv
+          py -3.12 -m venv $venv
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $py = Join-Path $venv 'Scripts\python.exe'
           "RADIA_OPTUNA_CI_PYTHON=$py" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -55,17 +57,16 @@ jobs:
           $build = Join-Path $root 'build-optuna-native'
           & pwsh -NoProfile -File "$root/tools/build_native.ps1" -Stage python -Python $env:RADIA_OPTUNA_CI_PYTHON -MatlabRoot $matlabRoot -BuildDirectory $build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          foreach ($mode in @('cpu','gpu')) {
-            & $env:RADIA_OPTUNA_CI_PYTHON "$root/validation_test/validate_kernels.py" --backend $mode --build-receipt "$build/python-build.json" --report "$build/python-$mode-verification.json"
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-          & pwsh -NoProfile -File "$root/tools/build_native.ps1" -Stage matlab -Python $env:RADIA_OPTUNA_CI_PYTHON -MatlabRoot $matlabRoot -BuildDirectory $build -PythonVerification "$build/python-gpu-verification.json"
+          & $env:RADIA_OPTUNA_CI_PYTHON "$root/validation_test/validate_kernels.py" --backend cpu --build-receipt "$build/python-build.json" --report "$build/python-cpu-verification.json"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & pwsh -NoProfile -File "$root/tools/build_native.ps1" -Stage matlab -Python $env:RADIA_OPTUNA_CI_PYTHON -MatlabRoot $matlabRoot -BuildDirectory $build -PythonVerification "$build/python-cpu-verification.json"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $escaped = $root.Replace("'", "''")
-          & matlab -batch "addpath('$escaped/matlab'); addpath('$escaped/validation_test'); validate_binding_parity('$escaped/build-optuna-native/python-cpu-verification.json','$escaped/build-optuna-native/parity-cpu.json'); validate_binding_parity('$escaped/build-optuna-native/python-gpu-verification.json','$escaped/build-optuna-native/parity-gpu.json');"
+          & matlab -batch "addpath('$escaped/matlab'); addpath('$escaped/validation_test'); validate_binding_parity('$escaped/build-optuna-native/python-cpu-verification.json','$escaped/build-optuna-native/parity-cpu.json');"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test, build, and verify radia-optuna wheel
+        id: wheel
         shell: pwsh
         run: |
           & $env:RADIA_OPTUNA_CI_PYTHON -m pip install build wheel pytest optuna==5.0.0
@@ -81,11 +82,14 @@ jobs:
           & $env:RADIA_OPTUNA_CI_PYTHON verify_wheel.py $wheels[0].FullName --json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Verify CPU/GPU upstream TPE parity and density lifecycle
+          $sha = (Get-FileHash -LiteralPath $wheels[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "sha256=$sha" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify CPU upstream TPE parity
         shell: pwsh
         run: |
           $root = (Get-Location).Path.Replace("'", "''")
-          & matlab -batch "addpath('$root/validation_test/optimization'); validate_optuna_cuda('$root','$root/build-optuna-native/cpu-selection-validation.json','cpu'); addpath('$root/validation_test/radia_optuna'); validate_cuda('$root','$root/matlab','$root/build-optuna-native/validation.json'); addpath('$root/validation_test/optimization'); validate_optuna_cuda('$root','$root/build-optuna-native/selection-validation.json');"
+          & matlab -batch "addpath('$root/validation_test/optimization'); validate_optuna_cuda('$root','$root/build-optuna-native/cpu-selection-validation.json','cpu');"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload radia-optuna wheel
@@ -99,7 +103,7 @@ jobs:
   installed-wheel-matlab-e2e:
     name: radia-optuna installed-wheel MATLAB/Simulink E2E
     needs: [build-test]
-    runs-on: [self-hosted, Windows, X64, "100", gpu-rtx]
+    runs-on: [self-hosted, Windows, X64, gpu-a100]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -110,52 +114,27 @@ jobs:
           name: radia-optuna-wheel
           path: dist/radia-optuna
 
-      - name: Install and inspect only the built wheel
-        shell: pwsh
-        run: |
-          $wheels = @(Get-ChildItem dist/radia-optuna/*.whl)
-          if ($wheels.Count -ne 1) {
-            throw "Expected one verified radia-optuna wheel, found $($wheels.Count)"
-          }
-          $venv = Join-Path $env:RUNNER_TEMP "radia-optuna-e2e-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          python -m venv $venv
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $venvPython = Join-Path $venv 'Scripts/python.exe'
-          & $venvPython -m pip install --disable-pip-version-check --no-deps $wheels[0].FullName
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & (Join-Path $venv 'Scripts/radia-optuna-doctor.exe') --json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $installedMatlabPath = (& $venvPython -c 'from radia_optuna import matlab_path; print(matlab_path())').Trim()
-          if (-not (Test-Path -LiteralPath $installedMatlabPath -PathType Container)) {
-            throw "Installed MATLAB directory is missing: $installedMatlabPath"
-          }
-          $testDirectory = (Resolve-Path tests/matlab).ProviderPath
-          "RADIA_OPTUNA_MATLAB_PATH=$installedMatlabPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "RADIA_OPTUNA_TEST_PATH=$testDirectory" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Test installed wheel with standalone Simulink
-        uses: matlab-actions/run-command@v3
-        with:
-          command: >-
-            addpath(getenv('RADIA_OPTUNA_MATLAB_PATH'));
-            addpath(getenv('RADIA_OPTUNA_TEST_PATH'));
-            result=test_standalone_simulink(getenv('RADIA_OPTUNA_MATLAB_PATH'));
-            assert(result.ok);
-            fid=fopen('installed-wheel-simulink.json','w');
-            fprintf(fid,'%s\n',jsonencode(result,PrettyPrint=true));
-            fclose(fid);
+      - name: Verify the GPU from the installed release wheel
+        shell: pwsh
+        env:
+          EXPECTED_WHEEL_SHA256: ${{ needs.build-test.outputs.wheel-sha256 }}
+        run: |
+          & pwsh -NoProfile -File validation_test/run_a100_acceptance.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload installed-wheel GPU and Simulink evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: radia-optuna-simulink-gpu-acceptance
-          path: installed-wheel-simulink.json
-          if-no-files-found: error
+          path: build-optuna-gpu-evidence/*.json
+          if-no-files-found: warn
 
   installed-wheel-release-engine:
     name: radia-optuna installed-wheel release Engine
     needs: [build-test]
-    runs-on: [self-hosted, Windows, X64, "100", gpu-rtx]
+    runs-on: [self-hosted, Windows, X64, gpu-a100]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -165,13 +144,18 @@ jobs:
           path: dist/radia-optuna
       - name: Qualify the exact CI wheel through MATLAB Engine
         shell: pwsh
+        env:
+          EXPECTED_WHEEL_SHA256: ${{ needs.build-test.outputs.wheel-sha256 }}
         run: |
           $wheels = @(Get-ChildItem dist/radia-optuna/*.whl)
           if ($wheels.Count -ne 1) {
             throw "Expected one verified radia-optuna wheel, found $($wheels.Count)"
           }
           $receipt = Join-Path $env:RUNNER_TEMP "radia-optuna-release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT.json"
-          & pwsh -NoProfile -File tests/run_installed_wheel_simulink.ps1 -Wheel $wheels[0].FullName -EvidenceOutput $receipt
+          $python = (& py -3.12 -I -c "import sys; print(sys.executable)").Trim()
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python -PathType Leaf)) { throw 'Expected an installed Python 3.12 interpreter.' }
+          if ($env:EXPECTED_WHEEL_SHA256 -notmatch '^[0-9a-f]{64}$') { throw 'Expected the build-job SHA-256.' }
+          & pwsh -NoProfile -File tests/run_installed_wheel_simulink.ps1 -PythonExecutable $python -Wheel $wheels[0].FullName -EvidenceOutput $receipt -PreverifiedWheelSha256 $env:EXPECTED_WHEEL_SHA256
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   installed-wheel-hdf5-storage:
@@ -196,7 +180,7 @@ jobs:
             throw "Expected one verified radia-optuna wheel, found $($wheels.Count)"
           }
           $venv = Join-Path $env:RUNNER_TEMP "radia-optuna-hdf5-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          python -m venv $venv
+          py -3.12 -m venv $venv
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $venvPython = Join-Path $venv 'Scripts/python.exe'
           & $venvPython -m pip install --disable-pip-version-check --no-deps $wheels[0].FullName

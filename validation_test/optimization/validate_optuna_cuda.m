@@ -1,13 +1,14 @@
-function result = validate_optuna_cuda(repoRoot, outputPath, executionMode)
+function result = validate_optuna_cuda(repoRoot, outputPath, executionMode, matlabDirectory)
 %VALIDATE_OPTUNA_CUDA Explicit CPU/GPU execution and pinned upstream TPE acceptance.
 arguments
     repoRoot (1,1) string
     outputPath (1,1) string = fullfile(repoRoot,'validation_test','optimization','results_optuna_cuda_100.json')
     executionMode (1,1) string {mustBeMember(executionMode,["cpu","gpu"])} = "gpu"
+    matlabDirectory (1,1) string = fullfile(repoRoot,'matlab')
 end
-addpath(fullfile(repoRoot,'matlab'));
+addpath(matlabDirectory,'-begin');
 binary = string(java.io.File(which('optuna_mex')).getCanonicalPath());
-expected = string(java.io.File(fullfile(repoRoot,'matlab',"optuna_mex."+mexext)).getCanonicalPath());
+expected = string(java.io.File(fullfile(matlabDirectory,"optuna_mex."+mexext)).getCanonicalPath());
 assert(strcmpi(binary,expected), 'Unexpected native gateway: %s',binary);
 previousMode = radia.optuna.executionMode();
 restoreMode = onCleanup(@()radia.optuna.executionMode(previousMode));

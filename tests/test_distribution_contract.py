@@ -265,6 +265,9 @@ def test_native_source_boundary_is_matlab_free_and_uses_one_archive():
     compiler = (PACKAGE_ROOT / "tools/build_native.py").read_text(encoding="utf-8")
     assert compiler.count("native/optuna_cuda.cu") == 1
     assert "--fmad=false" in compiler and "compute_80,code=compute_80" in compiler
+    targets = re.findall(r"arch=compute_(\d+),code=(?:sm|compute)_(\d+)", compiler)
+    assert targets and all(int(a) >= 80 and int(b) >= 80 for a, b in targets), (
+        f"CUDA targets below the A100 sm_80 floor: actual {targets}, expected all >= 80")
     assert "commands.insert(0,nvcc_command)" in compiler
     assert "Python-first verification receipt required" in compiler
     assert "MEX did not consume the identical Python-verified archive/objects" in compiler
